@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>赛格台式电扇 - 3D 模型 | Saige Desk Fan</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { 
+    background: #1a1a2e; 
+    overflow: hidden; 
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+  }
+  #canvas-container { width: 100vw; height: 100vh; }
+  #info {
+    position: absolute;
+    top: 16px; left: 16px;
+    color: #e0e0e0;
+    font-size: 13px;
+    background: rgba(0,0,0,0.55);
+    padding: 10px 16px;
+    border-radius: 8px;
+    line-height: 1.6;
+    pointer-events: none;
+    z-index: 10;
+  }
+  #info h1 { font-size: 15px; margin-bottom: 4px; color: #7fdbca; }
+  #info p { opacity: 0.75; }
+  #controls {
+    position: absolute;
+    bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px;
+    z-index: 10;
+  }
+  .btn {
+    background: rgba(127,219,202,0.15);
+    border: 1px solid rgba(127,219,202,0.35);
+    color: #7fdbca;
+    padding: 8px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+    backdrop-filter: blur(4px);
+  }
+  .btn:hover { background: rgba(127,219,202,0.3); }
+  .btn.active { background: rgba(127,219,202,0.35); border-color: #7fdbca; }
+  #speed-panel {
+    position: absolute;
+    bottom: 60px; right: 16px;
+    color: #aaa; font-size: 12px;
+    background: rgba(0,0,0,0.5); padding: 8px 12px;
+    border-radius: 6px; z-index: 10;
+  }
+  #speed-panel label { margin-right: 6px; }
+  #speed-panel input[type=range] { width: 100px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<div id="canvas-container"></div>
+<div id="info">
+  <h1>🌀 赛格(SAIGE) 台式电扇</h1>
+  <p>Image → Procedural Three.js · 拖拽旋转 · 滚轮缩放</p>
+</div>
+<div id="controls">
+  <button class="btn active" id="btn-spin">扇叶转动</button>
+  <button class="btn" id="btn-wireframe">线框模式</button>
+  <button class="btn" id="btn-auto">自动旋转</button>
+  <button class="btn" id="btn-reset">重置视角</button>
+</div>
+<div id="speed-panel">
+  <label>转速</label><input type="range" id="speed" min="0" max="200" value="80">
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── Scene Setup ──
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 100);
+camera.position.set(1.2, 0.5, 1.8);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+container.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(0, 0.08, 0);
+controls.minDistance = 0.6;
+controls.maxDistance = 5;
+
+// ── Lighting (matching spec) ──
+const keyLight = new THREE.DirectionalLight(0xfffaf0, 1.2);
+keyLight.position.set(1.5, 2.5, 3);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0xe8e8ff, 0.4);
+fillLight.position.set(-1.5, 0.8, 2);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0xffffff, 0.55);
+rimLight.position.set(0, 1.5, -2.5);
+scene.add(rimLight);
+
+const ambient = new THREE.AmbientLight(0xf0f0ff, 0.3);
+scene.add(ambient);
+
+// Soft hemisphere for natural ambient fill
+const hemi = new THREE.HemisphereLight(0xb0c4ff, 0x303040, 0.25);
+scene.add(hemi);
+
+// ── Ground plane (subtle shadow receiver) ──
+const groundGeo = new THREE.PlaneGeometry(6, 6);
+const groundMat = new THREE.MeshStandardMaterial({
+  color: 0x16162a,
+  roughness: 0.9,
+  metalness: 0.05
+});
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.285;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ═══════════════════════════════════════════
+//  SAIGE DESK FAN — PROCEDURAL FACTORY
+// ═══════════════════════════════════════════
+
+const fanGroup = new THREE.Group();
+fanGroup.name = 'SaigeDeskFan';
+scene.add(fanGroup);
+
+// ── Materials ──
+const guardMat = new THREE.MeshStandardMaterial({
+  color: 0x2a2a2a,
+  roughness: 0.55,
+  metalness: 0.35,
+  clearcoat: 0.1,
+  clearcoatRoughness: 0.3
+});
+
+const bladeMat = new THREE.MeshStandardMaterial({
+  color: 0xd4c8a8,
+  roughness: 0.70,
+  metalness: 0.0,
+  side: THREE.DoubleSide
+});
+
+const hubMat = new THREE.MeshPhysicalMaterial({
+  color: 0x2d4a44,
+  roughness: 0.25,
+  metalness: 0.05,
+  clearcoat: 0.6,
+  clearcoatRoughness: 0.15,
+  ior: 1.5
+});
+
+const neckMat = new THREE.MeshPhysicalMaterial({
+  color: 0x2d4a44,
+  roughness: 0.25,
+  metalness: 0.05,
+  clearcoat: 0.5,
+  clearcoatRoughness: 0.2,
+  ior: 1.5
+});
+
+const baseMat = new THREE.MeshStandardMaterial({
+  color: 0x2d4a44,
+  roughness: 0.45,
+  metalness: 0.02,
+  clearcoat: 0.2
+});
+
+// ── 1. Wire Guard (防护网) ──
+const guardGroup = new THREE.Group();
+guardGroup.name = 'WireGuard';
+
+const wireRadiusOuter = 0.85;
+const wireRadiusInner = 0.12;
+const ringCount = 3;
+const radialSpokes = 24;
+const wireThick = 0.008;
+const guardDepth = 0.06;
+
+// Concentric rings
+for (let r = 0; r < ringCount; r++) {
+  const radius = wireRadiusInner + (wireRadiusOuter - wireRadiusInner) * ((r + 1) / (ringCount + 1));
+  const ringGeo = new THREE.TorusGeometry(radius, wireThick * 0.5, 8, 80);
+  const ringMesh = new THREE.Mesh(ringGeo, guardMat);
+  ringMesh.rotation.y = Math.PI / 2;
+  ringMesh.position.z = r === 0 ? -guardDepth * 0.4 : (r === ringCount - 1 ? guardDepth * 0.4 : 0);
+  ringMesh.castShadow = true;
+  guardGroup.add(ringMesh);
+}
+
+// Outer ring (thicker)
+const outerRingGeo = new THREE.TorusGeometry(wireRadiusOuter, wireThick, 10, 80);
+const outerRing = new THREE.Mesh(outerRingGeo, guardMat);
+outerRing.rotation.y = Math.PI / 2;
+outerRing.castShadow = true;
+guardGroup.add(outerRing);
+
+// Inner hub ring
+const innerRingGeo = new THREE.TorusGeometry(wireRadiusInner, wireThick * 1.2, 10, 32);
+const innerRing = new THREE.Mesh(innerRingGeo, guardMat);
+innerRing.rotation.y = Math.PI / 2;
+innerRing.castShadow = true;
+guardGroup.add(innerRing);
+
+// Radial spokes
+for (let s = 0; s < radialSpokes; s++) {
+  const angle = (s / radialSpokes) * Math.PI * 2;
+  const spokeLen = wireRadiusOuter - wireRadiusInner + wireThick * 2;
+  const spokeGeo = new THREE.CylinderGeometry(wireThick * 0.5, wireThick * 0.5, spokeLen, 6);
+  const spoke = new THREE.Mesh(spokeGeo, guardMat);
+  spoke.position.set(
+    Math.cos(angle) * (wireRadiusInner + wireRadiusOuter) * 0.5,
+    Math.sin(angle) * (wireRadiusInner + wireRadiusOuter) * 0.5,
+    0
+  );
+  // Rotate to point radially outward
+  spoke.rotation.z = angle + Math.PI / 2;
+  spoke.castShadow = true;
+  guardGroup.add(spoke);
+}
+
+guardGroup.position.z = 0.03;
+fanGroup.add(guardGroup);
+
+// ── 2. Blade Group (扇叶组) ──
+const bladeGroup = new THREE.Group();
+bladeGroup.name = 'BladeGroup';
+const bladeCount = 5;
+
+function createBlade() {
+  // Airfoil-shaped blade using Shape + Extrude
+  const shape = new THREE.Shape();
+  const len = 0.72;
+  const wMax = 0.14;
+  
+  // Draw blade profile (curved airfoil shape)
+  shape.moveTo(0, -0.01);
+  // Leading edge curve
+  shape.quadraticCurveTo(wMax * 0.5, -len * 0.08, wMax, -len * 0.25);
+  shape.quadraticCurveTo(wMax * 0.85, -len * 0.5, wMax * 0.3, -len * 0.72);
+  // Tip
+  shape.quadraticCurveTo(0.02, -len * 0.78, 0, -len);
+  // Trailing edge (narrower return)
+  shape.lineTo(0, -0.01);
+  
+  const extrudeSettings = {
+    depth: 0.012,
+    bevelEnabled: true,
+    bevelThickness: 0.003,
+    bevelSize: 0.002,
+    bevelSegments: 2
+  };
+  
+  const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+  // Center the geometry
+  geo.center();
+  
+  // Apply twist by rotating cross-section vertices slightly
+  const posAttr = geo.attributes.position;
+  for (let i = 0; i < posAttr.count; i++) {
+    const y = posAttr.getY(i);
+    const twistAngle = (-y / len) * (12 * Math.PI / 180); // 12 degrees twist
+    const x = posAttr.getX(i);
+    const cos = Math.cos(twistAngle);
+    const sin = Math.sin(twistAngle);
+    posAttr.setX(i, x * cos);
+    posAttr.setZ(i, x * sin + (y > -len * 0.5 ? y * 0.04 : 0)); // slight curve
+  }
+  geo.computeVertexNormals();
+  
+  return geo;
+}
+
+const bladeGeo = createBlade();
+
+for (let b = 0; b < bladeCount; b++) {
+  const blade = new THREE.Mesh(bladeGeo, bladeMat);
+  const angle = (b / bladeCount) * Math.PI * 2;
+  blade.rotation.z = angle;
+  blade.position.set(
+    Math.cos(angle) * 0.11,
+    Math.sin(angle) * 0.11,
+    0
+  );
+  blade.castShadow = true;
+  blade.receiveShadow = true;
+  bladeGroup.add(blade);
+}
+
+bladeGroup.position.z = 0;
+fanGroup.add(bladeGroup);
+
+// ── 3. Motor Hub (电机罩) ──
+const hubGroup = new THREE.Group();
+hubGroup.name = 'MotorHub';
+
+// Main cylinder
+const hubGeo = new THREE.CylinderGeometry(0.11, 0.11, 0.05, 32);
+const hubMesh = new THREE.Mesh(hubGeo, hubMat);
+hubMesh.rotation.x = Math.PI / 2;
+hubMesh.castShadow = true;
+hubGroup.add(hubMesh);
+
+// Domed cap (front)
+const domeGeo = new THREE.SphereGeometry(0.11, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+const domeMesh = new THREE.Mesh(domeGeo, hubMat);
+domeMesh.rotation.x = -Math.PI / 2;
+domeMesh.position.z = 0.025;
+domeMesh.castShadow = true;
+hubGroup.add(domeMesh);
+
+// Logo decal area (slightly lighter circle)
+const logoGeo = new THREE.CircleGeometry(0.055, 24);
+const logoMat = new THREE.MeshStandardMaterial({
+  color: 0xe8e8e0,
+  roughness: 0.5,
+  metalness: 0.0
+});
+const logoDecal = new THREE.Mesh(logoGeo, logoMat);
+logoDecal.position.z = 0.076;
+hubGroup.add(logoDecal);
+
+// Logo text simulation (small rectangle for brand name)
+const textGeo = new THREE.PlaneGeometry(0.07, 0.02);
+const textMat = new THREE.MeshBasicMaterial({ 
+  color: 0xffffff, 
+  transparent: true, 
+  opacity: 0.85,
+  side: THREE.DoubleSide
+});
+const textDecal = new THREE.Mesh(textGeo, textMat);
+textDecal.position.set(0, -0.02, 0.077);
+hubGroup.add(textDecal);
+
+hubGroup.position.z = 0;
+fanGroup.add(hubGroup);
+
+// ── 4. Neck Column (支柱/转轴) ──
+const neckGeo = new THREE.CylinderGeometry(0.035, 0.04, 0.28, 24);
+const neckMesh = new THREE.Mesh(neckGeo, neckMat);
+neckMesh.position.set(0, -0.22, 0);
+neckMesh.castShadow = true;
+neckMesh.receiveShadow = true;
+neckMesh.name = 'NeckColumn';
+fanGroup.add(neckMesh);
+
+// Neck flange (top)
+const flangeTopGeo = new THREE.CylinderGeometry(0.05, 0.038, 0.025, 24);
+const flangeTop = new THREE.Mesh(flangeTopGeo, neckMat);
+flangeTop.position.set(0, -0.07, 0);
+flangeTop.castShadow = true;
+fanGroup.add(flangeTop);
+
+// Flange (bottom)
+const flangeBotGeo = new THREE.CylinderGeometry(0.048, 0.055, 0.02, 24);
+const flangeBot = new THREE.Mesh(flangeBotGeo, neckMat);
+flangeBot.position.set(0, -0.355, 0);
+flangeBot.castShadow = true;
+fanGroup.add(flangeBot);
+
+// ── 5. Base (底座) ──
+const baseGroup = new THREE.Group();
+baseGroup.name = 'Base';
+
+// Main platform (rounded box via extruded shape)
+const baseShape = new THREE.Shape();
+const bw = 0.56 / 2, bd = 0.22 / 2, br = 0.03;
+baseShape.moveTo(-bw + br, -bd);
+baseShape.lineTo(bw - br, -bd);
+baseShape.quadraticCurveTo(bw, -bd, bw, -bd + br);
+baseShape.lineTo(bw, bd - br);
+baseShape.quadraticCurveTo(bw, bd, bw - br, bd);
+baseShape.lineTo(-bw + br, bd);
+baseShape.quadraticCurveTo(-bw, bd, -bw, bd - br);
+baseShape.lineTo(-bw, -bd + br);
+baseShape.quadraticCurveTo(-bw, -bd, -bw + br, -bd);
+
+const baseExtrudeSettings = {
+  depth: 0.07,
+  bevelEnabled: true,
+  bevelThickness: 0.015,
+  bevelSize: 0.015,
+  bevelSegments: 6
+};
+const baseGeo = new THREE.ExtrudeGeometry(baseShape, baseExtrudeSettings);
+baseGeo.center();
+
+const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+baseMesh.position.set(0, -0.46, 0);
+baseMesh.castShadow = true;
+baseMesh.receiveShadow = true;
+baseGroup.add(baseMesh);
+
+// Control buttons on front (decorative detail)
+for (let i = 0; i < 3; i++) {
+  const btnGeo = new THREE.CylinderGeometry(0.012, 0.014, 0.008, 12);
+  const btnMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a1a,
+    roughness: 0.3,
+    metalness: 0.2
+  });
+  const btn = new THREE.Mesh(btnGeo, btnMat);
+  btn.rotation.x = Math.PI / 2;
+  btn.position.set(-0.04 + i * 0.04, -0.428, bd * 0.85);
+  btn.castShadow = true;
+  baseGroup.add(btn);
+}
+
+// Power knob (rotary dial)
+const knobGeo = new THREE.CylinderGeometry(0.022, 0.024, 0.015, 20);
+const knobMat = new THREE.MeshStandardMaterial({
+  color: 0x3a3a3a,
+  roughness: 0.25,
+  metalness: 0.15
+});
+const knob = new THREE.Mesh(knobGeo, knobMat);
+knob.rotation.x = Math.PI / 2;
+knob.position.set(0.09, -0.427, bd * 0.7);
+knob.castShadow = true;
+baseGroup.add(knob);
+
+// Knob indicator line
+const indGeo = new THREE.BoxGeometry(0.002, 0.003, 0.018);
+const indMat = new THREE.MeshBasicMaterial({ color: 0xcccccc });
+const indicator = new THREE.Mesh(indGeo, indMat);
+indicator.position.set(0.028, -0.426, bd * 0.7);
+baseGroup.add(indicator);
+
+fanGroup.add(baseGroup);
+
+// ── Position entire fan ──
+fanGroup.position.y = 0.12;
+
+// ═══════════════════════════════════════════
+//  ANIMATION & INTERACTION
+// ═══════════════════════════════════════════
+
+let isSpinning = true;
+let isWireframe = false;
+let isAutoRotate = false;
+let spinSpeed = 0.8;
+
+function setWireframe(obj, wf) {
+  if (obj.material) obj.material.wireframe = wf;
+  obj.children && obj.children.forEach(c => setWireframe(c, wf));
+}
+
+document.getElementById('btn-spin').onclick = function() {
+  isSpinning = !isSpinning;
+  this.classList.toggle('active', isSpinning);
+};
+document.getElementById('btn-wireframe').onclick = function() {
+  isWireframe = !isWireframe;
+  this.classList.toggle('active', isWireframe);
+  setWireframe(fanGroup, isWireframe);
+};
+document.getElementById('btn-auto').onclick = function() {
+  isAutoRotate = !isAutoRotate;
+  controls.autoRotate = isAutoRotate;
+  controls.autoRotateSpeed = 1.5;
+  this.classList.toggle('active', isAutoRotate);
+};
+document.getElementById('btn-reset').onclick = function() {
+  camera.position.set(1.2, 0.5, 1.8);
+  controls.target.set(0, 0.08, 0);
+  controls.update();
+};
+document.getElementById('speed').oninput = function() {
+  spinSpeed = this.value / 100;
+};
+
+// ── Render Loop ──
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  
+  if (isSpinning) {
+    bladeGroup.rotation.z += dt * spinSpeed * 3;
+  }
+  
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+animate();
+
+// ── Resize Handler ──
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
