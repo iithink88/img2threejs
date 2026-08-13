@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>img2threejs Demo — 赛格电扇 Image → 3D</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    line-height: 1.7;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    text-align: center;
+    padding: 60px 20px 40px;
+    background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+    border-bottom: 1px solid #21262d;
+  }
+  .hero h1 {
+    font-size: clamp(28px, 5vw, 42px);
+    font-weight: 700;
+    background: linear-gradient(135deg, #7fdbca, #58a6ff, #f78166);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+  }
+  .hero p { font-size: 16px; color: #8b949e; max-width: 600px; margin: 0 auto; }
+  .badge {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    margin: 4px;
+  }
+  .badge-blue { background: rgba(56,139,253,.15); color: #58a6ff; border: 1px solid rgba(56,139,253,.3); }
+  .badge-green { background: rgba(63,185,80,.15); color: #3fb950; border: 1px solid rgba(63,185,80,.3); }
+  .badge-purple { background: rgba(188,110,254,.15); color: #bc6eff; border: 1px solid rgba(188,110,254,.3); }
+  .badges { margin-top: 16px; }
+
+  /* ── Section ── */
+  .section { padding: 48px 24px; max-width: 1100px; margin: 0 auto; }
+  .section-title {
+    font-size: 22px; font-weight: 600; margin-bottom: 24px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-title::before {
+    content: ''; display: inline-block; width: 4px; height: 22px;
+    border-radius: 2px; background: linear-gradient(180deg, #7fdbca, #58a6ff);
+  }
+
+  /* ── Comparison Grid ── */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+  }
+  .card {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .card:hover { border-color: #30363d; transform: translateY(-2px); }
+  .card-img-wrap {
+    width: 100%;
+    aspect-ratio: 3/4;
+    overflow: hidden;
+    background: #0d1117;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card-img-wrap img { width: 100%; height: 100%; object-fit: contain; }
+  .card-body { padding: 16px 18px; }
+  .card-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: #8b949e; margin-bottom: 6px;
+  }
+  .card-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+  .card-desc { font-size: 13px; color: #8b949e; line-height: 1.6; }
+
+  /* ── Video Section ── */
+  .video-wrap {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #21262d;
+    background: #000;
+  }
+  .video-wrap video { width: 100%; display: block; }
+  .video-overlay {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 40px 20px 16px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.75));
+    pointer-events: none;
+  }
+  .video-overlay span {
+    font-size: 13px; color: #ccc;
+  }
+
+  /* ── Feature List ── */
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .feature-item {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .feature-icon { font-size: 24px; margin-bottom: 8px; }
+  .feature-item h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .feature-item p { font-size: 13px; color: #8b949e; }
+
+  /* ── Code Block ── */
+  .code-block {
+    background: #0d1117;
+    border: 1px solid #21262d;
+    border-radius: 10px;
+    padding: 20px;
+    overflow-x: auto;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    color: #c9d1d9;
+  }
+  .code-block .c-cmt { color: #8b949e; }
+  .code-block .c-kw { color: #ff7b72; }
+  .code-block .c-str { color: #a5d6ff; }
+  .code-block .c-fn { color: #d2a8ff; }
+  .code-block .c-num { color: #79c0ff; }
+
+  /* ── CTA ── */
+  .cta-section {
+    text-align: center;
+    padding: 60px 24px;
+    background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+    border-top: 1px solid #21262d;
+  }
+  .cta-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 28px;
+    background: linear-gradient(135deg, #238636, #2ea043);
+    color: #fff;
+    text-decoration: none;
+    border-radius: 8px;
+    font-size: 15px; font-weight: 600;
+    transition: opacity 0.2s, transform 0.2s;
+  }
+  .cta-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center;
+    padding: 24px;
+    color: #484f58;
+    font-size: 13px;
+    border-top: 1px solid #21262d;
+  }
+  footer a { color: #58a6ff; text-decoration: none; }
+
+  @media (max-width: 640px) {
+    .compare-grid { grid-template-columns: 1fr; }
+    .section { padding: 32px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══ Hero ═══ -->
+<div class="hero">
+  <h1>🌀 img2threejs</h1>
+  <p>Image → Procedural Three.js — 把一张照片重建成纯代码、过程化、可动画的 3D 模型</p>
+  <div class="badges">
+    <span class="badge badge-blue">Three.js</span>
+    <span class="badge badge-green">Pure Python (stdlib)</span>
+    <span class="badge badge-purple">Agent-Agnostic</span>
+    <span class="badge badge-blue">Apache-2.0</span>
+  </div>
+</div>
+
+<!-- ═══ Before & After ═══ -->
+<div class="section">
+  <h2 class="section-title">DEMO：赛格台式电扇 — 从照片到 3D</h2>
+  <div class="compare-grid">
+    <!-- Reference Image -->
+    <div class="card">
+      <div class="card-img-wrap">
+        <img src="demo-assets/fan-reference.png" alt="赛格电扇参考图" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-label">Input / 输入</div>
+        <div class="card-title">📷 参考照片</div>
+        <div class="card-desc">赛格(SAIGE)牌台式电扇，单张正面照片（224×361 px）。技能自动识别组件层级、材质、比例。</div>
+      </div>
+    </div>
+
+    <!-- 3D Model Link -->
+    <div class="card" style="cursor:pointer" onclick="window.open('saige-fan-3d.html','_blank')">
+      <div class="card-img-wrap" style="background:#0a0e14;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:30px">
+        <svg width="80" height="80" viewBox="0 0 64 64" fill="none">
+          <circle cx="32" cy="32" r="28" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <circle cx="32" cy="32" r="8" fill="#7fdbca" opacity="0.8"/>
+          <line x1="32" y1="4" x2="32" y2="16" stroke="#58a6ff" stroke-width="1.5"/>
+          <line x1="32" y1="48" x2="32" y2="60" stroke="#58a6ff" stroke-width="1.5"/>
+          <line x1="4" y1="32" x2="16" y2="32" stroke="#58a6ff" stroke-width="1.5"/>
+          <line x1="48" y1="32" x2="60" y2="32" stroke="#58a6ff" stroke-width="1.5"/>
+          <line x1="12" y1="12" x2="20" y2="20" stroke="#58a6ff" stroke-width="1"/>
+          <line x1="44" y1="44" x2="52" y2="52" stroke="#58a6ff" stroke-width="1"/>
+          <line x1="52" y1="12" x2="44" y2="20" stroke="#58a6ff" stroke-width="1"/>
+          <line x1="20" y1="44" x2="12" y2="52" stroke="#58a6ff" stroke-width="1"/>
+        </svg>
+        <span style="color:#58a6ff;font-size:14px;font-weight:600">点击打开交互 3D 模型 →</span>
+      </div>
+      <div class="card-body">
+        <div class="card-label">Output / 输出</div>
+        <div class="card-title">🎮 可交互 3D 模型</div>
+        <div class="card-desc">纯代码生成的 Three.js 场景——防护网、5 片扭曲翼型扇叶、电机罩、支柱、底座。支持拖拽旋转、缩放、扇叶动画。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Video Demo ═══ -->
+<div class="section">
+  <h2 class="section-title">🎬 3D 效果演示视频</h2>
+  <div class="video-wrap">
+    <video controls preload="metadata" poster="demo-assets/fan-reference.png">
+      <source src="demo-assets/fan-3d-demo.mp4" type="video/mp4">
+      您的浏览器不支持 video 标签。
+    </video>
+    <div class="video-overlay"><span>▶ 赛格电扇 — Image to Three.js 3D 实时渲染效果</span></div>
+  </div>
+</div>
+
+<!-- ═══ How It Works ═══ -->
+<div class="section">
+  <h2 class="section-title">⚙️ 工作流程</h2>
+  <div class="code-block">
+<span class="c-cmt"># 1. 初始化本地状态（强制入口）</span>
+<span class="c-kw">python</span> forge/state.py init --state .img2threejs/state.json \
+  --reference fan.png --profile generic
+
+<span class="c-cmt"># 2. 探测图像元数据 + 分析</span>
+<span class="c-kw">python</span> forge/stage1_intake/probe_image.py fan.png
+<span class="c-cmt"># → agent 视觉分析（分层观察协议）</span>
+
+<span class="c-cmt"># 3. 预评估 + 细节清单</span>
+<span class="c-kw">python</span> forge/stage2_spec/new_pre_spec_assessment.py <span class="c-str">"ObjectName"</span> \
+  --image fan.png --complexity moderate --out assessment.json
+<span class="c-kw">python</span> forge/stage1_intake/build_detail_inventory.py fan.png \
+  --mode grid-<span class="c-num">3</span>x<span class="c-num">3</span> --out-dir evidence/ --out di.json
+
+<span class="c-cmt"># 4. 撰写雕刻规格 (sculpt spec JSON)</span>
+<span class="c-cmt"># → 组件层级 / 材质PBR / 几何策略 / 质量契约</span>
+<span class="c-kw">python</span> forge/stage2_spec/new_sculpt_spec.py <span class="c-str">"Name"</span> \
+  --image fan.png --assessment assessment.json --out spec.json
+
+<span class="c-cmt"># 5. 验证规格 → 分 pass 构建代码 → 渲染验证</span>
+<span class="c-kw">python</span> forge/stage2_spec/validate_sculpt_spec.py spec.json
+<span class="c-kw">python</span> forge/stage3_build/generate_threejs_factory.py spec.json \
+  --out src/createModel.ts
+
+<span class="c-cmt"># 6. 浏览器渲染 → 截图对比 → Divine Eye 诊断 → 迭代修正</span>
+  </div>
+</div>
+
+<!-- ═══ Features ═══ -->
+<div class="section">
+  <h2 class="section-title">✨ 核心能力</h2>
+  <div class="features">
+    <div class="feature-item">
+      <div class="feature-icon">🔧</div>
+      <h3>零依赖核心</h3>
+      <p><code>forge/</code> 流水线纯 Python 标准库，无需 pip install，无需 GPU。</p>
+    </div>
+    <div class="feature-item">
+      <div class="feature-icon">📐</div>
+      <h3>分阶段构建</h3>
+      <p>Blockout → Structure → Form → Material → Lighting → Interaction，每 pass 有质量门控。</p>
+    </div>
+    <div class="feature-item">
+      <div class="feature-icon">🔄</div>
+      <h3>有界修正循环</h3>
+      <p>Divine Eye 确定性诊断 + VLM 救援层，每 pass 最多 3 次修正，全局上限 6 次。</p>
+    </div>
+    <div class="feature-item">
+      <div class="feature-icon">🤖</div>
+      <h3>Agent 无关</h3>
+      <p>Claude Code / Codex / OpenCode / WorkBuddy 均可运行，统一状态机驱动管线。</p>
+    </div>
+    <div class="feature-item">
+      <div class="feature-icon">🎨</div>
+      <h3>PBR 材质系统</h3>
+      <p>从参考图提取 albedo/roughness/metalness/clearcoat，支持投影纹理路径。</p>
+    </div>
+    <div class="feature-item">
+      <div class="feature-icon">📦</div>
+      <h3>动作就绪</h3>
+      <p>输出含 pivots/sockets/colliders/destruction groups 的运行时层级。</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CTA ═══ -->
+<div class="cta-section">
+  <a class="cta-btn" href="https://github.com/iithink88/img2threejs" target="_blank">
+    ⭐ GitHub 仓库 → Clone & Try
+  </a>
+  <p style="margin-top:16px;color:#8b949e;font-size:14px">
+    Apache-2.0 Licensed · Star 欢迎 · Issue / PR 随时欢迎
+  </p>
+</div>
+
+<footer>
+  <p>img2threejs — Image to Procedural Three.js · Built with ❤️ by the community</p>
+  <p style="margin-top:4px">
+    <a href="https://github.com/iithink88/img2threejs">GitHub</a> ·
+    <a href="https://github.com/img2threejs/img2threejs">Upstream</a>
+  </p>
+</footer>
+
+</body>
+</html>
